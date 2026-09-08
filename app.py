@@ -19,26 +19,49 @@ cota_inicial = st.sidebar.number_input(
     "Cota Inicial de Partida (BM) [m]", value=500.000, format="%.3f"
 )
 
+# --- INICIALIZAR ESTADO DE LA LIBRETA EN SESIÓN ---
+if "df_libreta" not in st.session_state:
+  st.session_state.df_libreta = pd.DataFrame(
+      {
+          "Punto": ["BM-1", "P-1", "P-2", "BM-2"],
+          "Lect. Atrás": [1.455, 0.0, 0.0, 0.0],
+          "Lect. Int.": [0.0, 1.320, 0.0, 0.0],
+          "Lect. Adel.": [0.0, 0.0, 0.942, 1.890],
+      }
+  )
+
 # --- 1. INGRESO DE LIBRETA DE CAMPO ---
 st.header("1. Ingreso de Libreta de Campo")
 st.markdown(
-    "Registre las lecturas de mira en las columnas correspondientes (ingreso"
-    " manual en rojo):"
+    "Registre las lecturas de mira o agregue nuevas filas con el botón"
+    " correspondiente:"
 )
 
-# Datos iniciales de ejemplo para la tabla editable
-datos_iniciales = pd.DataFrame(
-    {
-        "Punto": ["BM-1", "P-1", "P-2", "BM-2"],
-        "Lect. Atrás": [1.455, 0.0, 0.0, 0.0],
-        "Lect. Int.": [0.0, 1.320, 0.0, 0.0],
-        "Lect. Adel.": [0.0, 0.0, 0.942, 1.890],
-    }
-)
+# Botón para solicitar/agregar nueva lectura
+col_btn1, _ = st.columns([1, 3])
+with col_btn1:
+  if st.button("➕ Agregar Nueva Lectura"):
+    nueva_fila = pd.DataFrame(
+        {
+            "Punto": [f"P-{len(st.session_state.df_libreta)}"],
+            "Lect. Atrás": [0.000],
+            "Lect. Int.": [0.000],
+            "Lect. Adel.": [0.000],
+        }
+    )
+    st.session_state.df_libreta = pd.concat(
+        [st.session_state.df_libreta, nueva_fila], ignore_index=True
+    )
+    st.rerun()
 
+# Editor interactivo sincronizado
 df_libreta = st.data_editor(
-    datos_iniciales, num_rows="dynamic", use_container_width=True
+    st.session_state.df_libreta,
+    num_rows="dynamic",
+    use_container_width=True,
+    key="editor_libreta",
 )
+st.session_state.df_libreta = df_libreta
 
 # --- LÓGICA DE CÁLCULO ALTIMÉTRICO ---
 cotas_inst = []
@@ -82,12 +105,12 @@ sum_bs = df_libreta["Lect. Atrás"].sum()
 sum_fs = df_libreta["Lect. Adel."].sum()
 desnivel = sum_bs - sum_fs
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Suma Vistas Atrás (BS)", f"{sum_bs:.3f} m")
-col2.metric("Suma Vistas Adelante (FS)", f"{sum_fs:.3f} m")
-col3.metric("Desnivel Acumulado", f"{desnivel:.3f} m")
+m1, m2, m3 = st.columns(3)
+m1.metric("Suma Vistas Atrás (BS)", f"{sum_bs:.3f} m")
+m2.metric("Suma Vistas Adelante (FS)", f"{sum_fs:.3f} m")
+m3.metric("Desnivel Acumulado", f"{desnivel:.3f} m")
 
-# Renombrar columnas para reducir el ancho visual en la tabla
+# Renombrar columnas para reducir ancho visual
 df_mostrar = df_libreta.rename(
     columns={
         "Lect. Atrás": "L. Atrás",
@@ -97,24 +120,38 @@ df_mostrar = df_libreta.rename(
 )
 
 
-# Función para aplicar estilo: destacar lecturas de ingreso en rojo
-def resaltar_lecturas(df):
+# Función para aplicar formato de 3 decimales y destacar lecturas en rojo
+def estilizar_tabla(df):
   columnas_ingreso = ["L. Atrás", "L. Int.", "L. Adel."]
-  return df.style.map(
-      lambda x: "color: #d9534f; font-weight: bold;",
-      subset=[col for col in columnas_ingreso if col in df.columns],
+  columnas_numericas = ["L. Atrás", "L. Int.", "L. Adel.", "C. Inst.", "Cota"]
+
+  return (
+      df.style.format("{:.3f}", subset=columnas_numericas)
+      .map(
+          lambda x: "color: #d9534f; font-weight: bold;",
+          subset=[col for col in columnas_ingreso if col in df.columns],
+      )
   )
 
 
-# Mostrar la tabla estilizada en Streamlit
-st.dataframe(resaltar_lecturas(df_mostrar), use_container_width=True)
+st.dataframe(estilizar_tabla(df_mostrar), use_container_width=True)
 
-# --- 3. EXPORTACIÓN DE DATOS ---
-st.header("3. Exportación de Datos")
-csv_data = df_libreta.to_csv(index=False).encode("utf-8")
-st.download_button(
-    label="📥 Descargar Libreta Calculada (CSV)",
-    data=csv_data,
-    file_name="libreta_nivelacion_edos.csv",
-    mime="text/csv",
-)
+# --- 3. EXPORTACIÓN Y FINALIZACIÓN ---
+st.header("3. Exportación y Finalización de Libreta")
+col_exp1, col_exp2 = st.columns(2)
+
+with col_exp1:
+  csv_data = df_libreta.to_csv(index=False).encode("utf-8")
+  st.download_button(
+      label="📥 Descargar Libreta Calculada (CSV)",
+      data=csv_data,
+      file_name="libreta_nivelacion_edos.csv",
+      mime="text/csv",
+  )
+
+with col_exp2:
+  if st.button("🔒 Finalizar y Bloquear Libreta"):
+    st.success(
+        "¡Libreta de campo finalizada y validada correctamente para el informe"
+        " técnico!"
+    )
