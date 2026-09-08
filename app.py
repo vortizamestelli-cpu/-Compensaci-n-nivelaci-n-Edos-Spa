@@ -23,12 +23,12 @@ st.markdown("---")
 st.subheader("1. Ingreso de Libreta de Campo")
 st.markdown("Registre las lecturas de mira en las columnas correspondientes:")
 
-# Datos de ejemplo iniciales con las columnas solicitadas
+# Datos de ejemplo iniciales con columnas abreviadas
 data_default = pd.DataFrame([
-    {"Punto": "BM-1", "Lectura Atras": 1.455, "Lectura Intermedia": 0.0, "Lectura Adelante": 0.0, "Cota instrumental": 0.0, "Cota de terreno": 100.000},
-    {"Punto": "P-1", "Lectura Atras": 0.0, "Lectura Intermedia": 1.320, "Lectura Adelante": 0.0, "Cota instrumental": 0.0, "Cota de terreno": 0.0},
-    {"Punto": "P-2", "Lectura Atras": 0.0, "Lectura Intermedia": 0.0, "Lectura Adelante": 0.942, "Cota instrumental": 0.0, "Cota de terreno": 0.0},
-    {"Punto": "BM-2", "Lectura Atras": 0.0, "Lectura Intermedia": 0.0, "Lectura Adelante": 1.890, "Cota instrumental": 0.0, "Cota de terreno": 0.0}
+    {"Punto": "BM-1", "Lect. Atrás": 1.455, "Lect. Int.": 0.0, "Lect. Ad.": 0.0, "Cota Inst.": 0.0, "Cota Terr.": 100.000},
+    {"Punto": "P-1", "Lect. Atrás": 0.0, "Lect. Int.": 1.320, "Lect. Ad.": 0.0, "Cota Inst.": 0.0, "Cota Terr.": 0.0},
+    {"Punto": "P-2", "Lect. Atrás": 0.0, "Lect. Int.": 0.0, "Lect. Ad.": 0.942, "Cota Inst.": 0.0, "Cota Terr.": 0.0},
+    {"Punto": "BM-2", "Lect. Atrás": 0.0, "Lect. Int.": 0.0, "Lect. Ad.": 1.890, "Cota Inst.": 0.0, "Cota Terr.": 0.0}
 ])
 
 # Editor interactivo
@@ -46,9 +46,9 @@ if not df_libreta.empty:
         
         # Cálculo secuencial línea por línea
         for index, row in df.iterrows():
-            bs = row["Lectura Atras"]
-            is_val = row["Lectura Intermedia"]
-            fs = row["Lectura Adelante"]
+            bs = row["Lect. Atrás"]
+            is_val = row["Lect. Int."]
+            fs = row["Lect. Ad."]
             
             if index == 0:
                 cota_actual = cota_partida
@@ -63,13 +63,13 @@ if not df_libreta.empty:
                 elif fs > 0 and hi_actual > 0:
                     cota_actual = hi_actual - fs
 
-            df.loc[index, "Cota instrumental"] = round(hi_actual, 3)
-            df.loc[index, "Cota de terreno"] = round(cota_actual, 3)
+            df.loc[index, "Cota Inst."] = round(hi_actual, 3)
+            df.loc[index, "Cota Terr."] = round(cota_actual, 3)
 
         st.dataframe(df, use_container_width=True)
 
-        sum_bs = df["Lectura Atras"].sum()
-        sum_fs = df["Lectura Adelante"].sum()
+        sum_bs = df["Lect. Atrás"].sum()
+        sum_fs = df["Lect. Ad."].sum()
         desnivel_total = sum_bs - sum_fs
 
         col1, col2, col3 = st.columns(3)
