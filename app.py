@@ -9,8 +9,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📏 Compensación de Nivelación Geométrica")
-st.markdown("**EDOS SpA** | Módulo de Cálculo, Cierre y Control Altimétrico")
+st.title("📏 Compensación y Cálculo de Nivelación Geométrica")
+st.markdown("**EDOS SpA** | Módulo de Cálculo Altimétrico y Libreta Topográfica")
 
 # Barra lateral para parámetros generales
 st.sidebar.header("Parámetros del Proyecto")
@@ -21,14 +21,14 @@ cota_partida = st.sidebar.number_input("Cota Inicial de Partida (BM) [m]", value
 st.markdown("---")
 
 st.subheader("1. Ingreso de Libreta de Campo")
-st.markdown("Registre las lecturas de mira para las vistas atrás (BS) y vistas adelante (FS) de cada estación.")
+st.markdown("Registre las lecturas de mira en las columnas correspondientes:")
 
-# Datos de ejemplo iniciales
+# Datos de ejemplo iniciales con las columnas solicitadas
 data_default = pd.DataFrame([
-    {"Punto": "BM-1", "Distancia (m)": 0.0, "V. Atrás (BS)": 1.455, "V. Adelante (FS)": 0.0, "Tipo": "BM"},
-    {"Punto": "P-1", "Distancia (m)": 25.5, "V. Atrás (BS)": 1.820, "V. Adelante (FS)": 0.942, "Tipo": "EI"},
-    {"Punto": "P-2", "Distancia (m)": 30.0, "V. Atrás (BS)": 2.110, "V. Adelante (FS)": 1.155, "Tipo": "EI"},
-    {"Punto": "BM-2", "Distancia (m)": 20.0, "V. Atrás (BS)": 0.0, "V. Adelante (FS)": 1.890, "Tipo": "BM"}
+    {"Punto": "BM-1", "Lectura Atras": 1.455, "Lectura Intermedia": 0.0, "Lectura Adelante": 0.0, "Cota instrumental": 0.0, "Cota de terreno": 100.000},
+    {"Punto": "P-1", "Lectura Atras": 0.0, "Lectura Intermedia": 1.320, "Lectura Adelante": 0.0, "Cota instrumental": 0.0, "Cota de terreno": 0.0},
+    {"Punto": "P-2", "Lectura Atras": 0.0, "Lectura Intermedia": 0.0, "Lectura Adelante": 0.942, "Cota instrumental": 0.0, "Cota de terreno": 0.0},
+    {"Punto": "BM-2", "Lectura Atras": 0.0, "Lectura Intermedia": 0.0, "Lectura Adelante": 1.890, "Cota instrumental": 0.0, "Cota de terreno": 0.0}
 ])
 
 # Editor interactivo
@@ -36,15 +36,41 @@ df_libreta = st.data_editor(data_default, num_rows="dynamic", use_container_widt
 
 if not df_libreta.empty:
     st.markdown("---")
-    st.subheader("2. Resultados y Análisis Altimétrico")
+    st.subheader("2. Resultados y Cálculo Altimétrico")
 
     try:
         df = df_libreta.copy()
         
-        sum_bs = df["V. Atrás (BS)"].sum()
-        sum_fs = df["V. Adelante (FS)"].sum()
+        cota_actual = cota_partida
+        hi_actual = 0.0
+        
+        # Cálculo secuencial línea por línea
+        for index, row in df.iterrows():
+            bs = row["Lectura Atras"]
+            is_val = row["Lectura Intermedia"]
+            fs = row["Lectura Adelante"]
+            
+            if index == 0:
+                cota_actual = cota_partida
+                if bs > 0:
+                    hi_actual = cota_actual + bs
+            else:
+                if bs > 0:
+                    hi_actual = cota_actual + bs
+                
+                if is_val > 0 and hi_actual > 0:
+                    cota_actual = hi_actual - is_val
+                elif fs > 0 and hi_actual > 0:
+                    cota_actual = hi_actual - fs
+
+            df.loc[index, "Cota instrumental"] = round(hi_actual, 3)
+            df.loc[index, "Cota de terreno"] = round(cota_actual, 3)
+
+        st.dataframe(df, use_container_width=True)
+
+        sum_bs = df["Lectura Atras"].sum()
+        sum_fs = df["Lectura Adelante"].sum()
         desnivel_total = sum_bs - sum_fs
-        distancia_total = df["Distancia (m)"].sum()
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Suma Vistas Atrás (ΣBS)", f"{sum_bs:.3f} m")
@@ -52,40 +78,13 @@ if not df_libreta.empty:
         col3.metric("Desnivel Acumulado", f"{desnivel_total:.3f} m")
 
         st.markdown("---")
-        st.subheader("3. Control de Cierre y Tolerancia")
-        
-        tipo_nivelacion = st.radio(
-            "Seleccione el tipo de cierre:", 
-            ["Circuito Cerrado (Llegada al mismo BM)", "Circuito Abierto con Cota de Llegada Conocida", "Libre / Sin Cota de Cierre Final"]
-        )
-        
-        cota_llegada_teorica = cota_partida
-        if tipo_nivelacion == "Circuito Abierto con Cota de Llegada Conocida":
-            cota_llegada_teorica = st.number_input("Cota de Llegada Conocida [m]", value=100.120, format="%.3f")
-
-        if tipo_nivelacion != "Libre / Sin Cota de Cierre Final":
-            cota_calculada_final = cota_partida + desnivel_total
-            error_cierre = cota_calculada_final - cota_llegada_teorica
-            
-            st.info(f"**Cota de Llegada Calculada:** {cota_calculada_final:.3f} m  \n**Error de Cierre Altímétrico (e):** {error_cierre*1000:.2f} mm")
-            
-            # Tolerancia normativa típica en construcción civil (12 mm * sqrt(km))
-            tolerancia_mm = 12.0 * np.sqrt(max(distancia_total / 1000.0, 0.01))
-            st.write(f"Tolerancia admisible estimada: **{tolerancia_mm:.1f} mm**")
-
-            if abs(error_cierre * 1000) <= tolerancia_mm:
-                st.success("¡El error de cierre se encuentra dentro de la tolerancia normativa!")
-            else:
-                st.warning("El error de cierre excede la tolerancia estimada. Verifique las lecturas en terreno.")
-
-        st.markdown("---")
-        st.subheader("4. Exportación de Datos")
+        st.subheader("3. Exportación de Datos")
         
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Descargar Libreta Compensada (CSV)",
+            label="📥 Descargar Libreta Calculada (CSV)",
             data=csv,
-            file_name="libreta_compensada_edos.csv",
+            file_name="libreta_nivelacion_edos.csv",
             mime="text/csv",
         )
 
