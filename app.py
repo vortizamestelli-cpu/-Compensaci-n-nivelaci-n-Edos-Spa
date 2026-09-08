@@ -38,12 +38,12 @@ st.session_state.cota_inicial = st.sidebar.number_input(
 )
 
 # ==========================================
-# 2. INGRESO DE LIBRETA DE CAMPO
+# 2. INGRESO DE LIBRETA DE CAMPO (CON FORMULARIO)
 # ==========================================
 st.markdown("### 1. Ingreso de Libreta de Campo")
 st.markdown(
-    "Registre las lecturas de mira o modifique las filas directamente en la"
-    " tabla:"
+    "Modifique los valores en la tabla y presione el botón **'Aplicar y"
+    " Calcular'** para registrar los cambios de inmediato:"
 )
 
 # Inicializar el DataFrame en el session_state si no existe
@@ -55,16 +55,22 @@ if "df_libreta" not in st.session_state:
       "Lect. Adel.": [0.0, 0.0, 0.942, 1.890],
   })
 
-# st.data_editor sincronizado directamente con session_state para evitar doble clic o desfase
-edited_df = st.data_editor(
-    st.session_state.df_libreta,
-    num_rows="dynamic",
-    key="libreta_editor",
-    use_container_width=True,
-)
+# st.form agrupa los cambios de la tabla hasta hacer clic en el botón de envío
+with st.form("form_libreta"):
+  edited_df = st.data_editor(
+      st.session_state.df_libreta,
+      num_rows="dynamic",
+      key="libreta_editor",
+      use_container_width=True,
+  )
+  submit_button = st.form_submit_button(
+      "💾 Aplicar y Calcular", type="primary"
+  )
 
-# Actualizamos el session_state con los cambios del editor
-st.session_state.df_libreta = edited_df
+# Guardar los cambios en el estado global al presionar el botón del formulario
+if submit_button:
+  st.session_state.df_libreta = edited_df
+  st.success("¡Datos aplicados correctamente en la libreta!")
 
 # ==========================================
 # 3. CÁLCULOS ALTIMÉTRICOS AUTOMÁTICOS
