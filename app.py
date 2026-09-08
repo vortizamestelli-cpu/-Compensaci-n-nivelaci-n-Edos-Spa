@@ -3,155 +3,136 @@ import streamlit as st
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Compensación de Nivelación - EDOS SpA", page_icon="📏", layout="wide"
+    page_title="Compensación de Nivelación - EDOS SpA",
+    page_icon="📏",
+    layout="wide",
 )
 
 st.title("📏 Compensación de Nivelación Geométrica")
-st.markdown("**EDOS SpA** | Módulo de Cálculo, Cierre y Control Altimétrico")
-
-# --- BARRA LATERAL: PARÁMETROS DEL PROYECTO ---
-st.sidebar.header("Parámetros del Proyecto")
-nombre_proyecto = st.sidebar.text_input(
-    "Nombre del Proyecto", "Obra / Sector General"
-)
-operador = st.sidebar.text_input("Topógrafo / Operador", "Vicente Ortiz A.")
-cota_inicial = st.sidebar.number_input(
-    "Cota Inicial de Partida (BM) [m]", value=500.000, format="%.3f"
-)
-
-# --- INICIALIZAR ESTADO DE LA LIBRETA EN SESIÓN ---
-if "libreta_data" not in st.session_state:
-  st.session_state.libreta_data = pd.DataFrame(
-      {
-          "Punto": ["BM-1", "P-1", "P-2", "BM-2"],
-          "Lect. Atrás": [1.455, 0.0, 0.0, 0.0],
-          "Lect. Int.": [0.0, 1.320, 0.0, 0.0],
-          "Lect. Adel.": [0.0, 0.0, 0.942, 1.890],
-      }
-  )
-
-# --- 1. INGRESO DE LIBRETA DE CAMPO ---
-st.header("1. Ingreso de Libreta de Campo")
 st.markdown(
-    "Registre las lecturas de mira o agregue nuevas filas con el botón"
-    " correspondiente:"
+    "**EDOS SpA** | Módulo de Cálculo, Cierre y Control Altimétrico"
 )
 
-# Botón para agregar nueva lectura
-col_btn1, _ = st.columns([1, 3])
-with col_btn1:
-  if st.button("➕ Agregar Nueva Lectura"):
-    nueva_fila = pd.DataFrame(
-        {
-            "Punto": [f"P-{len(st.session_state.libreta_data)}"],
-            "Lect. Atrás": [0.000],
-            "Lect. Int.": [0.000],
-            "Lect. Adel.": [0.000],
-        }
-    )
-    st.session_state.libreta_data = pd.concat(
-        [st.session_state.libreta_data, nueva_fila], ignore_index=True
-    )
-    st.rerun()
+# ==========================================
+# 1. PARÁMETROS DEL PROYECTO (SESSION STATE)
+# ==========================================
+st.sidebar.header("Parámetros del Proyecto")
 
-# Editor interactivo (asignando directamente el resultado a session_state)
-df_libreta = st.data_editor(
-    st.session_state.libreta_data,
+if "proyecto" not in st.session_state:
+  st.session_state.proyecto = "Obra / Sector General"
+if "topografo" not in st.session_state:
+  st.session_state.topografo = "Vicente Ortiz A."
+if "cota_inicial" not in st.session_state:
+  st.session_state.cota_inicial = 500.000
+
+st.session_state.proyecto = st.sidebar.text_input(
+    "Nombre del Proyecto", st.session_state.proyecto
+)
+st.session_state.topografo = st.sidebar.text_input(
+    "Topógrafo / Operador", st.session_state.topografo
+)
+st.session_state.cota_inicial = st.sidebar.number_input(
+    "Cota Inicial de Partida (BM) [m]",
+    value=st.session_state.cota_inicial,
+    format="%.3f",
+)
+
+# ==========================================
+# 2. INGRESO DE LIBRETA DE CAMPO
+# ==========================================
+st.markdown("### 1. Ingreso de Libreta de Campo")
+st.markdown(
+    "Registre las lecturas de mira o modifique las filas directamente en la"
+    " tabla:"
+)
+
+# Inicializar el DataFrame en el session_state si no existe
+if "df_libreta" not in st.session_state:
+  st.session_state.df_libreta = pd.DataFrame({
+      "Punto": ["BM-1", "P-1", "P-2", "BM-2"],
+      "Lect. Atrás": [1.455, 0.0, 0.0, 0.0],
+      "Lect. Int.": [0.0, 1.320, 0.0, 0.0],
+      "Lect. Adel.": [0.0, 0.0, 0.942, 1.890],
+  })
+
+# st.data_editor sincronizado directamente con session_state para evitar doble clic o desfase
+edited_df = st.data_editor(
+    st.session_state.df_libreta,
     num_rows="dynamic",
+    key="libreta_editor",
     use_container_width=True,
-    key="editor_libreta",
 )
-st.session_state.libreta_data = df_libreta
 
-# --- LÓGICA DE CÁLCULO ALTIMÉTRICO ---
-cotas_inst = []
-cotas_terreno = []
-cota_actual = cota_inicial
-cota_inst_actual = 0.0
+# Actualizamos el session_state con los cambios del editor
+st.session_state.df_libreta = edited_df
 
-for index, row in df_libreta.iterrows():
-  ba = row["Lect. Atrás"]
-  bi = row["Lect. Int."]
-  bf = row["Lect. Adel."]
+# ==========================================
+# 3. CÁLCULOS ALTIMÉTRICOS AUTOMÁTICOS
+# ==========================================
+cota_actual = st.session_state.cota_inicial
+c_inst = 0.0
+cotas = []
+c_insts = []
 
-  if ba > 0:
-    cota_inst_actual = cota_actual + ba
-  cotas_inst.append(cota_inst_actual)
+sum_bs = 0.0
+sum_fs = 0.0
 
-  if ba > 0:
-    cota_actual = cota_inst_actual
+for idx, row in st.session_state.df_libreta.iterrows():
+  bs = float(row.get("Lect. Atrás", 0.0) or 0.0)
+  bi = float(row.get("Lect. Int.", 0.0) or 0.0)
+  fs = float(row.get("Lect. Adel.", 0.0) or 0.0)
+
+  sum_bs += bs
+  sum_fs += fs
+
+  if bs > 0:
+    c_inst = cota_actual + bs
+
+  c_insts.append(c_inst if c_inst > 0 else 0.0)
+
+  if bs > 0:
+    cotas.append(cota_actual)
   elif bi > 0:
-    cota_terreno = cota_inst_actual - bi
-    cotas_terreno.append(cota_terreno)
-    continue
-  elif bf > 0:
-    cota_terreno = cota_inst_actual - bf
-    cotas_terreno.append(cota_terreno)
-    cota_actual = cota_terreno
-    continue
-
-  if index == 0:
-    cotas_terreno.append(cota_inicial)
+    cota = c_inst - bi
+    cotas.append(cota)
+    cota_actual = cota
+  elif fs > 0:
+    cota = c_inst - fs
+    cotas.append(cota)
+    cota_actual = cota
   else:
-    cotas_terreno.append(cota_actual)
+    cotas.append(cota_actual)
 
-df_libreta["C. Inst."] = cotas_inst
-df_libreta["Cota"] = cotas_terreno
+# Construir DataFrame final con resultados
+df_resultado = st.session_state.df_libreta.copy()
+df_resultado["C. Inst."] = c_insts
+df_resultado["Cota"] = cotas
 
-# --- 2. RESULTADOS Y ANÁLISIS ALTIMÉTRICO ---
-st.header("2. Resultados y Análisis Altimétrico")
+# ==========================================
+# 4. RESULTADOS Y ANÁLISIS ALTIMÉTRICO
+# ==========================================
+st.markdown("### 2. Resultados y Análisis Altimétrico")
 
-sum_bs = df_libreta["Lect. Atrás"].sum()
-sum_fs = df_libreta["Lect. Adel."].sum()
+col1, col2, col3 = st.columns(3)
+col1.metric("Suma Vistas Atrás (BS)", f"{sum_bs:.3f} m")
+col2.metric("Suma Vistas Adelante (FS)", f"{sum_fs:.3f} m")
 desnivel = sum_bs - sum_fs
+col3.metric("Desnivel Acumulado", f"{desnivel:.3f} m")
 
-m1, m2, m3 = st.columns(3)
-m1.metric("Suma Vistas Atrás (BS)", f"{sum_bs:.3f} m")
-m2.metric("Suma Vistas Adelante (FS)", f"{sum_fs:.3f} m")
-m3.metric("Desnivel Acumulado", f"{desnivel:.3f} m")
+st.markdown("#### Detalle Calculado")
+st.dataframe(df_resultado, use_container_width=True)
 
-# Renombrar columnas para reducir ancho visual
-df_mostrar = df_libreta.rename(
-    columns={
-        "Lect. Atrás": "L. Atrás",
-        "Lect. Int.": "L. Int.",
-        "Lect. Adel.": "L. Adel.",
-    }
+# ==========================================
+# 5. EXPORTACIÓN Y FINALIZACIÓN
+# ==========================================
+st.markdown("### 3. Exportación y Finalización de Libreta")
+
+csv = df_resultado.to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="📥 Descargar Libreta Calculada (CSV)",
+    data=csv,
+    file_name=(
+        f"libreta_nivelacion_{st.session_state.proyecto.replace(' ', '_')}.csv"
+    ),
+    mime="text/csv",
 )
-
-
-# Función para aplicar formato de 3 decimales y destacar lecturas en rojo
-def estilizar_tabla(df):
-  columnas_ingreso = ["L. Atrás", "L. Int.", "L. Adel."]
-  columnas_numericas = ["L. Atrás", "L. Int.", "L. Adel.", "C. Inst.", "Cota"]
-
-  return (
-      df.style.format("{:.3f}", subset=columnas_numericas)
-      .map(
-          lambda x: "color: #d9534f; font-weight: bold;",
-          subset=[col for col in columnas_ingreso if col in df.columns],
-      )
-  )
-
-
-st.dataframe(estilizar_tabla(df_mostrar), use_container_width=True)
-
-# --- 3. EXPORTACIÓN Y FINALIZACIÓN ---
-st.header("3. Exportación y Finalización de Libreta")
-col_exp1, col_exp2 = st.columns(2)
-
-with col_exp1:
-  csv_data = df_libreta.to_csv(index=False).encode("utf-8")
-  st.download_button(
-      label="📥 Descargar Libreta Calculada (CSV)",
-      data=csv_data,
-      file_name="libreta_nivelacion_edos.csv",
-      mime="text/csv",
-  )
-
-with col_exp2:
-  if st.button("🔒 Finalizar y Bloquear Libreta"):
-    st.success(
-        "¡Libreta de campo finalizada y validada correctamente para el informe"
-        " técnico!"
-    )
