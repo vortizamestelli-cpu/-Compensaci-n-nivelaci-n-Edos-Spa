@@ -20,8 +20,8 @@ cota_inicial = st.sidebar.number_input(
 )
 
 # --- INICIALIZAR ESTADO DE LA LIBRETA EN SESIÓN ---
-if "df_libreta" not in st.session_state:
-  st.session_state.df_libreta = pd.DataFrame(
+if "libreta_data" not in st.session_state:
+  st.session_state.libreta_data = pd.DataFrame(
       {
           "Punto": ["BM-1", "P-1", "P-2", "BM-2"],
           "Lect. Atrás": [1.455, 0.0, 0.0, 0.0],
@@ -37,31 +37,33 @@ st.markdown(
     " correspondiente:"
 )
 
-# Botón para solicitar/agregar nueva lectura
+# Botón para agregar nueva lectura
 col_btn1, _ = st.columns([1, 3])
 with col_btn1:
   if st.button("➕ Agregar Nueva Lectura"):
     nueva_fila = pd.DataFrame(
         {
-            "Punto": [f"P-{len(st.session_state.df_libreta)}"],
+            "Punto": [f"P-{len(st.session_state.libreta_data)}"],
             "Lect. Atrás": [0.000],
             "Lect. Int.": [0.000],
             "Lect. Adel.": [0.000],
         }
     )
-    st.session_state.df_libreta = pd.concat(
-        [st.session_state.df_libreta, nueva_fila], ignore_index=True
+    st.session_state.libreta_data = pd.concat(
+        [st.session_state.libreta_data, nueva_fila], ignore_index=True
     )
     st.rerun()
 
-# Editor interactivo sincronizado
+# Editor interactivo ligado directamente a st.session_state
 df_libreta = st.data_editor(
-    st.session_state.df_libreta,
+    st.session_state.libreta_data,
     num_rows="dynamic",
     use_container_width=True,
     key="editor_libreta",
 )
-st.session_state.df_libreta = df_libreta
+
+# Actualizar el estado de la sesión con los cambios del editor
+st.session_state.libreta_data = df_libreta
 
 # --- LÓGICA DE CÁLCULO ALTIMÉTRICO ---
 cotas_inst = []
