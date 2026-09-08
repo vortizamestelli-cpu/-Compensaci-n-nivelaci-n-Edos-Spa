@@ -30,6 +30,13 @@ if "libreta_data" not in st.session_state:
       }
   )
 
+
+# --- CALLBACK PARA ACTUALIZACIÓN INMEDIATA ---
+def actualizar_tabla():
+  # Captura los cambios directamente del editor al primer Enter/cambio
+  st.session_state.libreta_data = st.session_state.editor_libreta
+
+
 # --- 1. INGRESO DE LIBRETA DE CAMPO ---
 st.header("1. Ingreso de Libreta de Campo")
 st.markdown(
@@ -41,29 +48,28 @@ st.markdown(
 col_btn1, _ = st.columns([1, 3])
 with col_btn1:
   if st.button("➕ Agregar Nueva Lectura"):
-    nueva_fila = pd.DataFrame(
-        {
-            "Punto": [f"P-{len(st.session_state.libreta_data)}"],
-            "Lect. Atrás": [0.000],
-            "Lect. Int.": [0.000],
-            "Lect. Adel.": [0.000],
-        }
-    )
+    nueva_fila = {
+        "Punto": f"P-{len(st.session_state.libreta_data)}",
+        "Lect. Atrás": 0.000,
+        "Lect. Int.": 0.000,
+        "Lect. Adel.": 0.000,
+    }
     st.session_state.libreta_data = pd.concat(
-        [st.session_state.libreta_data, nueva_fila], ignore_index=True
+        [
+            st.session_state.libreta_data,
+            pd.DataFrame([nueva_fila], columns=st.session_state.libreta_data.columns)],
+        ignore_index=True,
     )
     st.rerun()
 
-# Editor interactivo ligado directamente a st.session_state
+# Editor interactivo con callback de sincronización instantánea
 df_libreta = st.data_editor(
     st.session_state.libreta_data,
     num_rows="dynamic",
     use_container_width=True,
     key="editor_libreta",
+    on_change=actualizar_tabla,
 )
-
-# Actualizar el estado de la sesión con los cambios del editor
-st.session_state.libreta_data = df_libreta
 
 # --- LÓGICA DE CÁLCULO ALTIMÉTRICO ---
 cotas_inst = []
