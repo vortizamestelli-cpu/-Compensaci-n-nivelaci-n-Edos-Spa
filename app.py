@@ -23,7 +23,7 @@ if "proyecto" not in st.session_state:
 if "topografo" not in st.session_state:
   st.session_state.topografo = "Vicente Ortiz A."
 if "cota_inicial" not in st.session_state:
-  st.session_state.cota_inicial = 500.000
+  st.session_state.cota_inicial = 487.809
 
 st.session_state.proyecto = st.sidebar.text_input(
     "Nombre del Proyecto", st.session_state.proyecto
@@ -46,13 +46,13 @@ st.markdown(
     " Calcular'** para registrar los cambios de inmediato:"
 )
 
-# Inicializar el DataFrame en el session_state si no existe
+# Inicializar el DataFrame en el session_state si no existe con datos de ejemplo válidos
 if "df_libreta" not in st.session_state:
   st.session_state.df_libreta = pd.DataFrame({
-      "Punto": ["BM-1", "P-1", "P-2", "BM-2"],
-      "Lect. Atrás": [1.455, 0.0, 0.0, 0.0],
-      "Lect. Int.": [0.0, 1.320, 0.0, 0.0],
-      "Lect. Adel.": [0.0, 0.0, 0.942, 1.890],
+      "Punto": ["pr3", "1", "pr10", "1", "pr3"],
+      "Lect. Atrás": [1.723, 0.884, 1.075, 2.054, 0.0],
+      "Lect. Int.": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "Lect. Adel.": [0.0, 1.960, 0.720, 1.239, 1.815],
   })
 
 # st.form agrupa los cambios de la tabla hasta hacer clic en el botón de envío
@@ -73,7 +73,7 @@ if submit_button:
   st.success("¡Datos aplicados correctamente en la libreta!")
 
 # ==========================================
-# 3. CÁLCULOS ALTIMÉTRICOS AUTOMÁTICOS
+# 3. CÁLCULOS ALTIMÉTRICOS AUTOMÁTICOS (CORREGIDOS)
 # ==========================================
 cota_actual = st.session_state.cota_inicial
 c_inst = 0.0
@@ -91,23 +91,31 @@ for idx, row in st.session_state.df_libreta.iterrows():
   sum_bs += bs
   sum_fs += fs
 
+  # Caso especial para el primer punto (BM inicial)
+  if idx == 0 and bs > 0 and fs == 0:
+    c_inst = cota_actual + bs
+    cotas.append(cota_actual)
+    c_insts.append(c_inst)
+    continue
+
+  # 1. Calcular la cota del punto usando la visual adelante (FS) o intermedia (BI) vigente
+  cota_punto = cota_actual
+  if fs > 0:
+    cota_punto = c_inst - fs
+    cota_actual = cota_punto
+  elif bi > 0:
+    cota_punto = c_inst - bi
+    cota_actual = cota_punto
+  elif bs > 0:
+    cota_punto = cota_actual
+
+  cotas.append(cota_punto)
+
+  # 2. Si el punto tiene vista atrás (BS), actualizamos la altura instrumental para el siguiente tramo
   if bs > 0:
     c_inst = cota_actual + bs
 
   c_insts.append(c_inst if c_inst > 0 else 0.0)
-
-  if bs > 0:
-    cotas.append(cota_actual)
-  elif bi > 0:
-    cota = c_inst - bi
-    cotas.append(cota)
-    cota_actual = cota
-  elif fs > 0:
-    cota = c_inst - fs
-    cotas.append(cota)
-    cota_actual = cota
-  else:
-    cotas.append(cota_actual)
 
 # Construir DataFrame final con resultados
 df_resultado = st.session_state.df_libreta.copy()
