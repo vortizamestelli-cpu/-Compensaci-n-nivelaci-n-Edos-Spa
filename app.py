@@ -1,3 +1,4 @@
+from fpdf import FPDF
 import pandas as pd
 import streamlit as st
 
@@ -32,7 +33,6 @@ st.session_state.topografo = st.sidebar.text_input(
     "Topógrafo / Operador", st.session_state.topografo
 )
 
-# Menú de selección de tipo de nivelación
 tipo_nivelacion = st.sidebar.selectbox(
     "Tipo de Nivelación",
     [
@@ -47,7 +47,6 @@ st.session_state.cota_inicial = st.sidebar.number_input(
     format="%.3f",
 )
 
-# Parámetro adicional si es nivelación cerrada
 cota_final_conocida = st.session_state.cota_inicial
 if "Cerrada" in tipo_nivelacion:
   cota_final_conocida = st.sidebar.number_input(
@@ -65,7 +64,6 @@ st.markdown(
     " Calcular'** para registrar los cambios de inmediato:"
 )
 
-# Inicializar el DataFrame en el session_state si no existe
 if "df_libreta" not in st.session_state:
   st.session_state.df_libreta = pd.DataFrame({
       "Punto": ["BM-1", "P-1", "P-2", "BM-1"],
@@ -99,7 +97,6 @@ c_insts = []
 
 sum_bs = 0.0
 sum_fs = 0.0
-num_estaciones = 0
 
 for idx, row in st.session_state.df_libreta.iterrows():
   bs = float(row.get("Lect. Atrás", 0.0) or 0.0)
@@ -108,9 +105,6 @@ for idx, row in st.session_state.df_libreta.iterrows():
 
   sum_bs += bs
   sum_fs += fs
-
-  if bs > 0:
-    num_estaciones += 1
 
   if idx == 0 and bs > 0 and fs == 0:
     c_inst = cota_actual + bs
@@ -139,17 +133,15 @@ df_resultado = st.session_state.df_libreta.copy()
 df_resultado["C. Inst."] = c_insts
 df_resultado["Cota Bruta"] = cotas
 
-# Compensación si es nivelación cerrada
+err_cierre = 0.0
 if "Cerrada" in tipo_nivelacion and len(df_resultado) > 0:
   cota_calculada_final = cotas[-1]
-  error_cierre = cota_calculada_final - cota_final_conocida
+  err_cierre = cota_calculada_final - cota_final_conocida
 
-  # Distribución proporcional del error por número de estaciones o puntos
   correcciones = []
   n_puntos = len(cotas)
   for i in range(n_puntos):
-    # Corrección proporcional lineal según el avance de la libreta
-    corr = -error_cierre * (i / max(1, n_puntos - 1))
+    corr = -err_cierre * (i / max(1, n_puntos - 1))
     correcciones.append(corr)
 
   df_resultado["Corrección"] = correcciones
@@ -172,7 +164,6 @@ col3.metric("Desnivel Acumulado", f"{desnivel:.3f} m")
 
 if "Cerrada" in tipo_nivelacion:
   cota_calc_final = cotas[-1] if len(cotas) > 0 else 0
-  err_cierre = cota_calc_final - cota_final_conocida
   st.info(
       f"**Control de Cierre:** Cota Calculada = {cota_calc_final:.3f} m | Cota"
       f" Teórica = {cota_final_conocida:.3f} m | **Error de Cierre:**"
@@ -182,17 +173,101 @@ if "Cerrada" in tipo_nivelacion:
 st.markdown("#### Detalle Calculado")
 st.dataframe(df_resultado, use_container_width=True)
 
+
 # ==========================================
-# 5. EXPORTACIÓN Y FINALIZACIÓN
+# 5. GENERACIÓN DE PDF Y EXPORTACIÓN
 # ==========================================
+class PDFReporte(FPDF):
+
+  def header(self):
+    self.set_font("helvetica", "B", 14)
+    self.cell(
+        0, 8, "EDOS SpA - Informe de Nivelación Geométrica", 0, 1, "C"
+    )
+    self.set_font("helvetica", "", 9)
+    self.cell(
+        0,
+        5,
+        "Modulo de Control y Compensación Altimétrica de Terreno",
+        0,
+        1,
+        "C",
+    )
+    self.ln(5)
+
+  def footer(self):
+    self.set_y(-15)
+    self.set_font("helvetica", "I", 8)
+    self.cell(
+        0,
+        10,
+        f"Página {self.page_no()} - EDOS SpA",
+        0,
+        0,
+        "C",
+    )
+
+
+def crear_pdf(df, proyecto, topografo, tipo_niv, cota_ini, error_c):
+  pdf = PDFReporte(orientation="L", unit="mm", format="A4")
+  pdf.add_page()
+
+  # Datos del Proyecto
+  pdf.set_font("helvetica", "B", 10)
+  pdf.cell(0, 6, "DATOS GENERALES DEL PROYECTO", 0, 1)
+  pdf.set_font("helvetica", "", 9)
+  pdf.cell(0, 5, f"Proyecto: {proyecto}", 0, 1)
+  pdf.cell(0, 5, f"Topógrafo / Operador: {topografo}", 0, 1)
+  pdf.cell(0, 5, f"Tipo de Nivelación: {tipo_niv}", 0, 1)
+  pdf.cell(0, 5, f"Cota Inicial (BM): {cota_ini:.3f} m", 0, 1)
+  if "Cerrada" in tipo_niv:
+    pdf.cell(
+        0, 5, f"Error de Cierre Calculado: {error_c*1000:.1f} mm", 0, 1
+    )
+  pdf.ln(5)
+
+  # Tabla de resultados
+  pdf.set_font("helvetica", "B", 9)
+  columnas = list(df.columns)
+  anchos = [30, 32, 32, 32, 35, 35, 35, 35]  # Anchos proporcionales para A4
+
+  # Cabeceras
+  for i, col in enumerate(columnas):
+    pdf.cell(anchos[i] if i < len(anchos) else 25, 7, str(col), 1, 0, "C")
+  pdf.ln()
+
+  # Filas de datos
+  pdf.set_font("helvetica", "", 8)
+  for _, row in df.iterrows():
+    for i, val in enumerate(row):
+      if isinstance(val, float):
+        val_str = f"{val:.3f}"
+      else:
+        val_str = str(val) if val is not None else ""
+      pdf.cell(
+          anchos[i] if i < len(anchos) else 25, 6, val_str, 1, 0, "C"
+      )
+    pdf.ln()
+
+  return bytes(pdf.output())
+
+
 st.markdown("### 3. Exportación y Finalización de Libreta")
 
-csv = df_resultado.to_csv(index=False).encode("utf-8")
+pdf_bytes = crear_pdf(
+    df_resultado,
+    st.session_state.proyecto,
+    st.session_state.topografo,
+    tipo_nivelacion,
+    st.session_state.cota_inicial,
+    err_cierre,
+)
+
 st.download_button(
-    label="📥 Descargar Libreta Calculada (CSV)",
-    data=csv,
+    label="📥 Descargar Informe en PDF",
+    data=pdf_bytes,
     file_name=(
-        f"libreta_nivelacion_{st.session_state.proyecto.replace(' ', '_')}.csv"
+        f"Informe_Nivelacion_{st.session_state.proyecto.replace(' ', '_')}.pdf"
     ),
-    mime="text/csv",
+    mime="application/pdf",
 )
